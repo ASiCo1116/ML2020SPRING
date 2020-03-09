@@ -1,5 +1,5 @@
-.csv
-.zip
-.npy
+*.csv
+*.zip
+*.npy
 __pycache__
 .DS_Store
