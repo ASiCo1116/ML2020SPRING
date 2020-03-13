@@ -3,6 +3,7 @@ import csv
 import ipdb
 import numpy as np
 import argparse
+import matplotlib.pyplot as plt
 
 from IPython import embed
 
@@ -14,6 +15,14 @@ def preprocess(array):
 	array = np.divide(array, std)
 	# array[np.isnan(array)] = 0.0
 	return array.astype(np.float64)
+
+def train_test_split(arr1, arr2, ratio):
+	test_idx = np.random.choice(arr1.shape[0], size = int(arr1.shape[0] * ratio), replace = False)
+	train_idx = np.array([index for index in range(arr1.shape[0]) if index not in test_idx])
+	return arr1[train_idx, :], arr1[test_idx, :], arr2[train_idx, :], arr2[test_idx, :]
+
+# def feature(list_):
+# 	return [idx for idx in range(18) if idx not in list_]
 
 def training():
 	train = np.genfromtxt('./train.csv', delimiter = ',', encoding = 'big5')
@@ -36,28 +45,41 @@ def training():
 	train_x = preprocess(train_x)
 	b = np.ones((12 * 471, 1))
 	train_x = np.concatenate((b, train_x), axis = 1).astype(float)
+
+	x_train, x_valid, y_train, y_valid = train_test_split(train_x, train_y, float(sys.argv[3]))
+
 	w = np.zeros((18 * 9 + 1, 1))
-	lr = 1e2
-	epochs = 1000
-	# best_loss = 10000
+	lr = float(sys.argv[1])
+	epochs = int(sys.argv[2])
+	train_loss_his = []
+	valid_loss_his = []
+	best_loss = 100000.0
 	adagrad = np.zeros((18 * 9 + 1, 1))
 	for epoch in range(epochs):
-		loss = np.sqrt((np.sum(np.power(train_y - train_x.dot(w), 2)) / train_x.shape[0]))
+		train_loss = np.sqrt((np.sum(np.power(y_train - x_train.dot(w), 2)) / x_train.shape[0]))
+		valid_loss = np.sqrt((np.sum(np.power(y_valid - x_valid.dot(w), 2)) / x_valid.shape[0]))
 		if epoch % 100 == 0:
-			print(f'epoch: [{epoch + 1}]/[{epochs}]\tepoch loss: {loss:.3f}')
-		gradient = 2 * np.dot(train_x.T, train_x.dot(w) - train_y)
+			if valid_loss < best_loss:
+				best_loss = valid_loss
+				print('best weight saved!')
+				np.save('w.npy', w)
+			train_loss_his.append(train_loss)
+			valid_loss_his.append(valid_loss)
+			print(f'epoch: [{epoch + 1}]/[{epochs}]\ttrain loss: {train_loss:.3f}\tvalid loss: {valid_loss:.3f}')
+		gradient = 2 * np.dot(x_train.T, x_train.dot(w) - y_train)
 		adagrad += gradient ** 2
 		w = w - lr * gradient / (adagrad + 1e-7) ** .5
-		# if loss < best_loss:
-		# 	best_loss = loss
-	np.save('w.npy', w)
+	plt.figure()
+	plt.plot(np.arange(epochs / 100), train_loss_his)
+	plt.plot(np.arange(epochs / 100), valid_loss_his)
+	plt.show()
+	plt.savefig('loss.png')
 		
 
 def testing(npy):
 	test = np.genfromtxt('./test.csv', delimiter = ',', encoding = 'big5')
 	test = test[:, 2:]
 	test_split = np.vsplit(test, test.shape[0] / 18)
-	# test = np.hstack(test_split)
 	test = np.zeros((240, 18 * 9))
 	for i, split in enumerate(test_split):
 		test[i, :] = split.reshape(1, 18 * 9)
