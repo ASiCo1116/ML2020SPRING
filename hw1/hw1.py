@@ -2,51 +2,70 @@ import sys
 import csv
 import ipdb
 import numpy as np
+import argparse
 
 from IPython import embed
 
 def preprocess(array):
 	array[np.isnan(array)] = 0.0
-	array = array.astype(np.float64)
-	array = np.subtract(array, array.min(axis = 1).reshape(18, 1))
-	array = np.divide(array, array.max(axis = 1).reshape(18, 1))
-	array[np.isnan(array)] = 0.0
-	return array
+	mean = np.mean(array, axis = 0).reshape(1, array.shape[1])
+	std = np.std(array, axis = 0).reshape(1, array.shape[1])
+	array = np.subtract(array, mean)
+	array = np.divide(array, std)
+	# array[np.isnan(array)] = 0.0
+	return array.astype(np.float64)
 
 def training():
 	train = np.genfromtxt('./train.csv', delimiter = ',', encoding = 'big5')
 	train = train[1:, 3:]
 	train_split = np.vsplit(train, train.shape[0] / 18)
-	train = np.hstack(train_split).astype(np.float64)
-	train = preprocess(train)
-	w = np.random.randn(1, 18 * 9).astype(np.float64)
-	lr = 1e-4
-	epochs = 100
-	best_loss = 1000000
-	best_weight = np.zeros((1, 18 * 9))
+	train = np.hstack(train_split)
+	train_x = np.zeros((12 * 471, 18 * 9))
+	train_y = np.zeros((12 * 471, 1))
+	i = 0
+	j = 0
+	count = 0
+	while i < train.shape[1]:
+		train_x[j, :] = train[:, i:i+9].reshape(1, 18 * 9)
+		train_y[j][0] = train[9][9 + i]
+		if (i + 10) % 480 == 0:
+			i += 10
+		else:
+			i += 1
+		j += 1
+	train_x = preprocess(train_x)
+	b = np.ones((12 * 471, 1))
+	train_x = np.concatenate((b, train_x), axis = 1).astype(float)
+	w = np.zeros((18 * 9 + 1, 1))
+	lr = 1e3
+	epochs = 10000
+	best_loss = 10000
+	adagrad = np.zeros((18 * 9 + 1, 1))
 	for epoch in range(epochs):
-		epoch_loss = 0.0
-		for i in range(train.shape[1] - 9):
-			loss = train[9, 9 + i] - w.dot(train[:, i:i+9].reshape(18 * 9, 1))
-			epoch_loss += np.sum(loss ** 2)
-			w += lr * 2 * loss * train[:, i:i+9].reshape(1, 18 * 9)
-			if epoch_loss < best_loss:
-				best_loss = epoch_loss
-				best_weight = w
-				np.save('w.npy', best_weight)
-				print('Best weight saved!')
-		print(f'epoch: [{epoch + 1}]/[{epochs}]\tepoch loss: {epoch_loss:.3f}')
+		loss = np.sqrt((np.sum(np.power(train_y - train_x.dot(w), 2)) / train_x.shape[0]))
+		print(f'epoch: [{epoch + 1}]/[{epochs}]\tepoch loss: {loss:.3f}')
+		gradient = 2 * np.dot(train_x.T, train_x.dot(w) - train_y)
+		adagrad += gradient ** 2
+		w = w - lr * gradient / (adagrad + 1e-7) ** .5
+		if loss < best_loss:
+			best_loss = loss
+			np.save('w.npy', w)
+			print('Best weight saved!')
+		
 
 def testing(npy):
 	test = np.genfromtxt('./test.csv', delimiter = ',', encoding = 'big5')
 	test = test[:, 2:]
 	test_split = np.vsplit(test, test.shape[0] / 18)
 	test = np.hstack(test_split)
+	# print(test.shape)
 	test = preprocess(test)
+	b = np.ones((240, 1))
+	test = np.concatenate((test, b), axis = 1).astype(float)
 	weight = np.load(npy)
 	ans = np.zeros((240, ))
-	for i in range(test.shape[0], 18):
-		ans[i] = np.dot(weight, test[i:i+18].reshape(18 * 9, 1))
+	for i in range(ans.shape[0]):
+		ans[i] = np.dot(weight, test[:, [j + i * 9 for j in range(9)]].reshape(18 * 9, 1))
 	with open('res.csv', 'w', newline = '') as file:
 		csvwriter = csv.writer(file)
 		title = ['id', 'value']
@@ -55,5 +74,5 @@ def testing(npy):
 
 
 if __name__ == '__main__':
-	training()
+	# training()
 	testing('./w.npy')
