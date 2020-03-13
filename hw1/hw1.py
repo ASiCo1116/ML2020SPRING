@@ -37,42 +37,44 @@ def training():
 	b = np.ones((12 * 471, 1))
 	train_x = np.concatenate((b, train_x), axis = 1).astype(float)
 	w = np.zeros((18 * 9 + 1, 1))
-	lr = 1e3
-	epochs = 10000
-	best_loss = 10000
+	lr = 1e2
+	epochs = 1000
+	# best_loss = 10000
 	adagrad = np.zeros((18 * 9 + 1, 1))
 	for epoch in range(epochs):
 		loss = np.sqrt((np.sum(np.power(train_y - train_x.dot(w), 2)) / train_x.shape[0]))
-		print(f'epoch: [{epoch + 1}]/[{epochs}]\tepoch loss: {loss:.3f}')
+		if epoch % 100 == 0:
+			print(f'epoch: [{epoch + 1}]/[{epochs}]\tepoch loss: {loss:.3f}')
 		gradient = 2 * np.dot(train_x.T, train_x.dot(w) - train_y)
 		adagrad += gradient ** 2
 		w = w - lr * gradient / (adagrad + 1e-7) ** .5
-		if loss < best_loss:
-			best_loss = loss
-			np.save('w.npy', w)
-			print('Best weight saved!')
+		# if loss < best_loss:
+		# 	best_loss = loss
+	np.save('w.npy', w)
 		
 
 def testing(npy):
 	test = np.genfromtxt('./test.csv', delimiter = ',', encoding = 'big5')
 	test = test[:, 2:]
 	test_split = np.vsplit(test, test.shape[0] / 18)
-	test = np.hstack(test_split)
-	# print(test.shape)
+	# test = np.hstack(test_split)
+	test = np.zeros((240, 18 * 9))
+	for i, split in enumerate(test_split):
+		test[i, :] = split.reshape(1, 18 * 9)
 	test = preprocess(test)
 	b = np.ones((240, 1))
-	test = np.concatenate((test, b), axis = 1).astype(float)
+	test = np.concatenate((b, test), axis = 1).astype(float)
 	weight = np.load(npy)
-	ans = np.zeros((240, ))
-	for i in range(ans.shape[0]):
-		ans[i] = np.dot(weight, test[:, [j + i * 9 for j in range(9)]].reshape(18 * 9, 1))
+	ans = np.zeros((240, 1))
+	ans = test.dot(weight)
 	with open('res.csv', 'w', newline = '') as file:
 		csvwriter = csv.writer(file)
 		title = ['id', 'value']
+		csvwriter.writerow(title)
 		for i in range(240):
-			csvwriter.writerow([f'id_{i}', ans[i]])
+			csvwriter.writerow([f'id_{i}', ans[i][0]])
 
 
 if __name__ == '__main__':
-	# training()
+	training()
 	testing('./w.npy')
